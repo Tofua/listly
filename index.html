@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>List Manager</title>
+  <style>
+    /* Minimalist color variables */
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #000000;
+      --accent-color: #4c84ff; 
+      --highlight-color: #ffc0cb;
+      --line-spacing: 1.0;
+      --item-spacing: 4px;
+      --transition-speed: 0.15s;
+    }
+    [data-theme="dark"] {
+      --bg-color: #222222;
+      --text-color: #eeeeee;
+      --accent-color: #6b9fff;
+      --highlight-color: #ff6b8b;
+    }
+
+    /* Minimal pink highlight class */
+    .pink-highlight {
+      background-color: var(--highlight-color) !important;
+    }
+
+    /* Core layout */
+    body {
+      margin: 0; 
+      padding: 20px;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: sans-serif;
+      font-size: 16px;
+      max-width: 800px;
+      margin: 0 auto;
+      transition: background-color var(--transition-speed), color var(--transition-speed);
+    }
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 15px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    /* Minimal drop-down and tiny buttons */
+    select, input[type="text"], button {
+      font-size: 14px;
+      border: none;
+      outline: none;
+      background: none;
+      color: inherit;
+      transition: opacity var(--transition-speed);
+    }
+    select, input[type="text"] {
+      border-bottom: 1px solid currentColor;
+      padding: 2px 0;
+    }
+    button {
+      cursor: pointer;
+      padding: 2px 4px;
+    }
+    button:hover {
+      opacity: 0.7;
+    }
+
+    /* Title input */
+    #list-title {
+      font-size: 1.3rem;
+      padding: 2px 0;
+      border-bottom: 1px solid currentColor;
+    }
+
+    /* Extra margin before the list */
+    #list-container {
+      margin-top: 2rem; /* Added spacing before the list */
+      transition: all var(--transition-speed);
+    }
+    .list-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: var(--item-spacing);
+      line-height: calc(1em * var(--line-spacing));
+      transition: background-color var(--transition-speed);
+    }
+    .list-item.selected {
+      background-color: rgba(76, 132, 255, 0.07);
+    }
+    .list-item.dragging {
+      opacity: 0.4;
+    }
+    .item-number {
+      min-width: 28px;
+      margin-right: 8px;
+      font-weight: bold;
+    }
+    .item-content {
+      flex-grow: 1;
+      outline: none;
+      min-height: 20px;
+      line-height: inherit;
+    }
+    .item-content:focus {
+      background-color: rgba(76, 132, 255, 0.05);
+    }
+    .delete-button {
+      opacity: 0.3;
+      border: none;
+      background: none;
+      margin-left: 4px;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .list-item:hover .delete-button {
+      opacity: 0.8;
+    }
+    .empty {
+      color: #aaa;
+    }
+
+    /* Add item container */
+    #add-item-container {
+      display: flex;
+      margin: 10px 0;
+      gap: 6px;
+    }
+    #new-item {
+      flex-grow: 1;
+      border-bottom: 1px solid currentColor;
+      padding: 2px 0;
+    }
+
+    /* Formatting bar */
+    .formatting-bar {
+      position: absolute;
+      padding: 4px 6px;
+      display: flex;
+      gap: 4px;
+      background-color: var(--bg-color);
+      border: 1px solid currentColor;
+      border-radius: 3px;
+      z-index: 10;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity var(--transition-speed);
+    }
+    .formatting-bar.visible {
+      pointer-events: auto;
+      opacity: 1;
+    }
+
+    /* Confirmation dialog */
+    .confirmation-dialog {
+      position: fixed;
+      top: 0; left: 0;
+      right: 0; bottom: 0;
+      background-color: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .confirmation-content {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      padding: 16px;
+      border: 1px solid currentColor;
+      border-radius: 4px;
+      text-align: center;
+    }
+
+    /* Warmth slider */
+    .warmth-control {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    input[type="range"] {
+      cursor: pointer;
+    }
+
+    /* Distinguish global font size controls slightly */
+    .global-font-controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* The 'drop line' to show where dragged item will be placed */
+    #drop-line {
+      position: absolute;
+      height: 2px;
+      background-color: var(--accent-color);
+      display: none;
+      z-index: 999;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 style="margin:0;font-size:1.2rem;">List Manager</h1>
+    <div class="controls">
+      <select id="font-selector">
+        <option value="sans-serif">Sans-serif</option>
+        <option value="serif">Serif</option>
+        <option value="monospace">Monospace</option>
+        <option value="Arial, sans-serif">Arial</option>
+        <option value="'Times New Roman', serif">Times</option>
+      </select>
+      
+      <div class="spacing-controls" style="display:flex;align-items:center;gap:4px;">
+        <label title="Line Spacing">Line:</label>
+        <button id="decrease-spacing">–</button>
+        <span id="spacing-value">1.0</span>
+        <button id="increase-spacing">+</button>
+      </div>
+      
+      <div class="spacing-controls" style="display:flex;align-items:center;gap:4px;">
+        <label title="Item Spacing">Gap:</label>
+        <button id="decrease-item-spacing">–</button>
+        <span id="item-spacing-value">4</span>
+        <button id="increase-item-spacing">+</button>
+      </div>
+      
+      <div style="display:flex;align-items:center;gap:4px;">
+        <label for="theme-switch">Dark</label>
+        <input type="checkbox" id="theme-switch" />
+      </div>
+      
+      <div class="warmth-control">
+        <label for="warmth-slider">Warmth</label>
+        <input type="range" id="warmth-slider" min="0" max="100" value="0">
+      </div>
+      
+      <div class="global-font-controls">
+        <label>Font:</label>
+        <button id="global-font-decrease">A–</button>
+        <button id="global-font-increase">A+</button>
+      </div>
+    </div>
+  </header>
+
+  <input type="text" id="list-title" placeholder="Enter List Title Here..." />
+
+  <!-- Formatting bar for text inside a tile -->
+  <div class="formatting-bar" id="formatting-bar">
+    <button data-command="bold"><b>B</b></button>
+    <button data-command="italic"><i>I</i></button>
+    <button data-command="underline"><u>U</u></button>
+    <button id="grey-text-button">Grey</button>
+    <button id="pink-highlight-button">Pink</button>
+    <button id="indent-button">→</button>
+    <button id="outdent-button">←</button>
+    <button id="font-decrease">A–</button>
+    <button id="font-increase">A+</button>
+  </div>
+
+  <div id="list-container"></div>
+
+  <div id="add-item-container">
+    <input type="text" id="new-item" placeholder="Add new item..." />
+    <button id="add-button">Add</button>
+  </div>
+
+  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+    <button id="export-button">Export</button>
+    <button id="import-button">Import</button>
+    <input type="file" id="import-file" style="display:none;" accept=".json"/>
+  </div>
+
+  <!-- Hidden drop-line used during dragging -->
+  <div id="drop-line"></div>
+
+  <!-- Confirmation dialog -->
+  <div id="confirmation-dialog" class="confirmation-dialog" style="display:none;">
+    <div class="confirmation-content">
+      <p>Delete this item?</p>
+      <div style="margin-top:10px;">
+        <button class="confirm-delete">Yes</button>
+        <button class="cancel-delete">No</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentLineSpacing = 1.0;
+    let currentItemSpacing = 4;
+    const defaultTileFontSize = 16;
+    const defaultGlobalFontSize = 16;
+    let globalFontSize = defaultGlobalFontSize;
+
+    if(localStorage.getItem('globalFontSize')) {
+      globalFontSize = parseInt(localStorage.getItem('globalFontSize'));
+    }
+    document.body.style.fontSize = globalFontSize + 'px';
+
+    const listContainer = document.getElementById('list-container');
+    const newItemInput = document.getElementById('new-item');
+    const addButton = document.getElementById('add-button');
+    const exportButton = document.getElementById('export-button');
+    const importButton = document.getElementById('import-button');
+    const importFileInput = document.getElementById('import-file');
+    const formatButtons = document.querySelectorAll('[data-command]');
+    const greyTextButton = document.getElementById('grey-text-button');
+    const pinkHighlightButton = document.getElementById('pink-highlight-button');
+    const indentButton = document.getElementById('indent-button');
+    const outdentButton = document.getElementById('outdent-button');
+    const listTitleInput = document.getElementById('list-title');
+    const confirmationDialog = document.getElementById('confirmation-dialog');
+    const confirmDeleteButton = document.querySelector('.confirm-delete');
+    const cancelDeleteButton = document.querySelector('.cancel-delete');
+    const formattingBar = document.getElementById('formatting-bar');
+    const fontSelector = document.getElementById('font-selector');
+    const increaseSpacingBtn = document.getElementById('increase-spacing');
+    const decreaseSpacingBtn = document.getElementById('decrease-spacing');
+    const spacingValueDisplay = document.getElementById('spacing-value');
+    const increaseItemSpacingBtn = document.getElementById('increase-item-spacing');
+    const decreaseItemSpacingBtn = document.getElementById('decrease-item-spacing');
+    const itemSpacingValueDisplay = document.getElementById('item-spacing-value');
+    const themeSwitch = document.getElementById('theme-switch');
+    const warmthSlider = document.getElementById('warmth-slider');
+    const fontIncreaseBtn = document.getElementById('font-increase');
+    const fontDecreaseBtn = document.getElementById('font-decrease');
+    const globalFontIncreaseBtn = document.getElementById('global-font-increase');
+    const globalFontDecreaseBtn = document.getElementById('global-font-decrease');
+    const dropLine = document.getElementById('drop-line');
+
+    let items = [];
+    let draggedItemIndex = null;
+    let itemToDelete = null;
+    let selectedItemIndex = null;
+    let undoStates = [{items: [], title: ''}];
+    let undoIndex = 0;
+
+    /* ---------------- Warmth Functions ---------------- */
+    function interpolateLightColor(val) {
+      const t = val / 100;
+      const r = Math.round(245*(1 - t) + 210*t);
+      const g = Math.round(245*(1 - t) + 180*t);
+      const b = Math.round(245*(1 - t) + 140*t);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+    function interpolateDarkColor(val) {
+      const t = val / 100;
+      const r = Math.round(34*(1 - t) + 60*t);
+      const g = Math.round(34*(1 - t) + 50*t);
+      const b = Math.round(34*(1 - t) + 40*t);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+    function applyWarmth(val) {
+      let newColor;
+      if (document.documentElement.getAttribute('data-theme') === 'dark') {
+        newColor = interpolateDarkColor(val);
+      } else {
+        newColor = interpolateLightColor(val);
+      }
+      document.documentElement.style.setProperty('--bg-color', newColor);
+      localStorage.setItem('warmth', val);
+    }
+    warmthSlider.addEventListener('input', () => {
+      applyWarmth(warmthSlider.value);
+    });
+    if (localStorage.getItem('warmth')) {
+      warmthSlider.value = localStorage.getItem('warmth');
+      applyWarmth(warmthSlider.value);
+    }
+
+    /* ---------------- Global Font Size ---------------- */
+    function updateTileFontSizes() {
+      const multiplier = globalFontSize / defaultGlobalFontSize;
+      for (let i = 0; i < listContainer.children.length; i++) {
+        const tile = listContainer.children[i];
+        let item = items[i];
+        let effectiveSize = (item.fontSize || defaultTileFontSize) * multiplier;
+        const itemContent = tile.querySelector('.item-content');
+        if(itemContent) {
+          itemContent.style.fontSize = effectiveSize + 'px';
+        }
+      }
+    }
+    globalFontDecreaseBtn.addEventListener('click', () => {
+      if (globalFontSize > 8) {
+        globalFontSize--;
+        document.body.style.fontSize = globalFontSize + 'px';
+        localStorage.setItem('globalFontSize', globalFontSize);
+        updateTileFontSizes();
+      }
+    });
+    globalFontIncreaseBtn.addEventListener('click', () => {
+      globalFontSize++;
+      document.body.style.fontSize = globalFontSize + 'px';
+      localStorage.setItem('globalFontSize', globalFontSize);
+      updateTileFontSizes();
+    });
+
+    /* ---------------- Theme Toggle ---------------- */
+    themeSwitch.addEventListener('change', () => {
+      document.documentElement.setAttribute('data-theme', themeSwitch.checked ? 'dark' : '');
+      localStorage.setItem('theme', themeSwitch.checked ? 'dark' : 'light');
+      applyWarmth(warmthSlider.value);
+    });
+    if (localStorage.getItem('theme') === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      themeSwitch.checked = true;
+    }
+
+    /* ---------------- Font Selector ---------------- */
+    fontSelector.addEventListener('change', () => {
+      document.body.style.fontFamily = fontSelector.value;
+      localStorage.setItem('fontFamily', fontSelector.value);
+      saveList();
+    });
+    if (localStorage.getItem('fontFamily')) {
+      fontSelector.value = localStorage.getItem('fontFamily');
+      document.body.style.fontFamily = fontSelector.value;
+    }
+
+    /* ---------------- Line Spacing ---------------- */
+    increaseSpacingBtn.addEventListener('click', () => {
+      if (currentLineSpacing < 2.5) {
+        currentLineSpacing = Math.round((currentLineSpacing + 0.1) * 10) / 10;
+        updateLineSpacing();
+      }
+    });
+    decreaseSpacingBtn.addEventListener('click', () => {
+      if (currentLineSpacing > 0.8) {
+        currentLineSpacing = Math.round((currentLineSpacing - 0.1) * 10) / 10;
+        updateLineSpacing();
+      }
+    });
+    function updateLineSpacing() {
+      document.documentElement.style.setProperty('--line-spacing', currentLineSpacing);
+      spacingValueDisplay.textContent = currentLineSpacing.toFixed(1);
+      localStorage.setItem('lineSpacing', currentLineSpacing);
+    }
+    if (localStorage.getItem('lineSpacing')) {
+      currentLineSpacing = parseFloat(localStorage.getItem('lineSpacing'));
+      updateLineSpacing();
+    }
+
+    /* ---------------- Item Spacing ---------------- */
+    increaseItemSpacingBtn.addEventListener('click', () => {
+      if (currentItemSpacing < 20) {
+        currentItemSpacing += 1;
+        updateItemSpacing();
+      }
+    });
+    decreaseItemSpacingBtn.addEventListener('click', () => {
+      if (currentItemSpacing > 0) {
+        currentItemSpacing -= 1;
+        updateItemSpacing();
+      }
+    });
+    function updateItemSpacing() {
+      document.documentElement.style.setProperty('--item-spacing', currentItemSpacing + 'px');
+      itemSpacingValueDisplay.textContent = currentItemSpacing;
+      localStorage.setItem('itemSpacing', currentItemSpacing);
+    }
+    if (localStorage.getItem('itemSpacing')) {
+      currentItemSpacing = parseInt(localStorage.getItem('itemSpacing'));
+      updateItemSpacing();
+    }
+
+    /* ---------------- Per-tile Font Size ---------------- */
+    fontIncreaseBtn.addEventListener('click', () => {
+      if (selectedItemIndex !== null) {
+        let item = items[selectedItemIndex];
+        let newSize = (item.fontSize || defaultTileFontSize) + 1;
+        item.fontSize = newSize;
+        const effectiveSize = newSize * (globalFontSize / defaultGlobalFontSize);
+        const selectedTile = listContainer.children[selectedItemIndex];
+        const itemContent = selectedTile.querySelector('.item-content');
+        if (itemContent) {
+          itemContent.style.fontSize = effectiveSize + 'px';
+        }
+        saveList();
+      }
+    });
+    fontDecreaseBtn.addEventListener('click', () => {
+      if (selectedItemIndex !== null) {
+        let item = items[selectedItemIndex];
+        let currentSize = item.fontSize || defaultTileFontSize;
+        if (currentSize > 8) {
+          let newSize = currentSize - 1;
+          item.fontSize = newSize;
+          const effectiveSize = newSize * (globalFontSize / defaultGlobalFontSize);
+          const selectedTile = listContainer.children[selectedItemIndex];
+          const itemContent = selectedTile.querySelector('.item-content');
+          if (itemContent) {
+            itemContent.style.fontSize = effectiveSize + 'px';
+          }
+          saveList();
+        }
+      }
+    });
+
+    /* ---------------- Formatting Bar Positioning ---------------- */
+    function showFormatBarForSelectedItem() {
+      if (selectedItemIndex !== null) {
+        const selectedItem = listContainer.children[selectedItemIndex];
+        if (selectedItem) {
+          const rect = selectedItem.getBoundingClientRect();
+          formattingBar.style.left = `${rect.left + window.scrollX}px`;
+          formattingBar.style.top = `${rect.top + window.scrollY - formattingBar.offsetHeight - 10}px`;
+          if (rect.top < formattingBar.offsetHeight + 10) {
+            formattingBar.style.top = `${rect.bottom + window.scrollY + 10}px`;
+          }
+          const rightEdge = rect.left + formattingBar.offsetWidth;
+          if (rightEdge > window.innerWidth) {
+            formattingBar.style.left = `${window.innerWidth - formattingBar.offsetWidth - 20}px`;
+          }
+          formattingBar.classList.add('visible');
+        }
+      } else {
+        formattingBar.classList.remove('visible');
+      }
+    }
+    function showFormatBar() {
+      const selection = window.getSelection();
+      if (!selection.rangeCount) return;
+      if (selection.toString().length > 0) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        formattingBar.style.left = `${rect.left + window.scrollX}px`;
+        formattingBar.style.top = `${rect.top + window.scrollY - formattingBar.offsetHeight - 10}px`;
+        if (rect.top < formattingBar.offsetHeight + 10) {
+          formattingBar.style.top = `${rect.bottom + window.scrollY + 10}px`;
+        }
+        const rightEdge = rect.left + formattingBar.offsetWidth;
+        if (rightEdge > window.innerWidth) {
+          formattingBar.style.left = `${window.innerWidth - formattingBar.offsetWidth - 20}px`;
+        }
+        formattingBar.classList.add('visible');
+      }
+    }
+
+    /* ---------------- Text Formatting Buttons ---------------- */
+    formatButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (window.getSelection().toString().length > 0) {
+          document.execCommand(button.getAttribute('data-command'), false, null);
+          setTimeout(() => formattingBar.classList.add('visible'), 10);
+          saveList();
+        }
+      });
+    });
+
+    greyTextButton.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const active = document.activeElement;
+      if (active && active.classList.contains('item-content') && window.getSelection().toString().length > 0) {
+        let currentColor = document.queryCommandValue('foreColor').toLowerCase();
+        let defaultColor = window.getComputedStyle(document.body).color.toLowerCase();
+        document.execCommand('foreColor', false,
+          (currentColor === 'grey' || currentColor === 'rgb(128, 128, 128)') ? defaultColor : 'grey');
+        setTimeout(() => formattingBar.classList.add('visible'), 10);
+        saveList();
+      }
+    });
+
+    pinkHighlightButton.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const active = document.activeElement;
+      if (active && active.classList.contains('item-content') && window.getSelection().toString().length > 0) {
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+        const range = selection.getRangeAt(0);
+        let isHighlighted = false;
+        const checkForHighlight = (node) => {
+          if (!node) return false;
+          if (node.nodeType === 1 && node.classList && node.classList.contains('pink-highlight')) {
+            return true;
+          }
+          if (node.parentNode) {
+            return checkForHighlight(node.parentNode);
+          }
+          return false;
+        };
+        isHighlighted = checkForHighlight(selection.anchorNode) || checkForHighlight(selection.focusNode);
+
+        function removeHighlights(range) {
+          const container = range.commonAncestorContainer;
+          const root = container.nodeType === 1 ? container : container.parentNode;
+          const highlightSpans = [];
+          const iterator = document.createNodeIterator(root, NodeFilter.SHOW_ELEMENT, {
+            acceptNode: node => (node.classList && node.classList.contains('pink-highlight'))
+              ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+          });
+          let span;
+          while (span = iterator.nextNode()) {
+            highlightSpans.push(span);
+          }
+          highlightSpans.forEach(span => {
+            const fragment = document.createDocumentFragment();
+            while (span.firstChild) {
+              fragment.appendChild(span.firstChild);
+            }
+            span.parentNode.insertBefore(fragment, span);
+            span.parentNode.removeChild(span);
+          });
+        }
+
+        if (isHighlighted) {
+          removeHighlights(range);
+        } else {
+          const span = document.createElement('span');
+          span.className = 'pink-highlight';
+          try {
+            range.surroundContents(span);
+          } catch (error) {
+            const fragment = range.extractContents();
+            span.appendChild(fragment);
+            range.insertNode(span);
+          }
+        }
+        setTimeout(() => formattingBar.classList.add('visible'), 10);
+        saveList();
+      }
+    });
+
+    indentButton.addEventListener('click', () => {
+      if (selectedItemIndex !== null && selectedItemIndex > 0) {
+        items[selectedItemIndex].indentation = Math.min(
+          items[selectedItemIndex].indentation + 1,
+          items[selectedItemIndex - 1].indentation + 1
+        );
+        renderList();
+        setTimeout(() => selectItem(selectedItemIndex), 10);
+        saveList();
+      }
+    });
+    outdentButton.addEventListener('click', () => {
+      if (selectedItemIndex !== null && items[selectedItemIndex].indentation > 0) {
+        items[selectedItemIndex].indentation--;
+        renderList();
+        setTimeout(() => selectItem(selectedItemIndex), 10);
+        saveList();
+      }
+    });
+
+    /* ---------------- Add New Item ---------------- */
+    function addItem() {
+      const text = newItemInput.value.trim();
+      if (text) {
+        items.push({ text: text, html: text, indentation: 0, fontSize: defaultTileFontSize });
+        renderList();
+        newItemInput.value = '';
+        saveList();
+      }
+    }
+    addButton.addEventListener('click', addItem);
+    newItemInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') addItem();
+    });
+
+    /* ---------------- Numbering ---------------- */
+    function computeNumbers() {
+      let counters = [];
+      let numbers = [];
+      for (let i = 0; i < items.length; i++) {
+        let level = items[i].indentation;
+        if (level >= counters.length) {
+          while (counters.length <= level) {
+            counters.push(0);
+          }
+          counters[level] = 1;
+        } else {
+          counters = counters.slice(0, level + 1);
+          counters[level]++;
+        }
+        numbers.push(counters.join('.'));
+      }
+      return numbers;
+    }
+
+    /* ---------------- Selection ---------------- */
+    function selectItem(index) {
+      document.querySelectorAll('.list-item.selected').forEach(item => item.classList.remove('selected'));
+      selectedItemIndex = index;
+      if (index !== null) {
+        const item = listContainer.children[index];
+        if (item) {
+          item.classList.add('selected');
+          showFormatBarForSelectedItem();
+        }
+      } else {
+        formattingBar.classList.remove('visible');
+      }
+    }
+
+    /* ---------------- Drag-Drop with Drop-Line ---------------- */
+    function renderList() {
+      listContainer.innerHTML = '';
+      const numbers = computeNumbers();
+      const multiplier = globalFontSize / defaultGlobalFontSize;
+
+      items.forEach((item, index) => {
+        const listItem = document.createElement('div');
+        listItem.className = 'list-item';
+        if (index === selectedItemIndex) {
+          listItem.classList.add('selected');
+        }
+        listItem.draggable = true;
+        listItem.style.marginLeft = (item.indentation * 30) + 'px';
+
+        const itemNumber = document.createElement('div');
+        itemNumber.className = 'item-number';
+        itemNumber.textContent = numbers[index];
+
+        const itemContent = document.createElement('div');
+        itemContent.className = 'item-content';
+        itemContent.contentEditable = true;
+        itemContent.innerHTML = item.html || item.text || '';
+        itemContent.style.fontSize = ((item.fontSize || defaultTileFontSize) * multiplier) + 'px';
+
+        if (itemContent.innerHTML.trim() === '') {
+          itemContent.innerHTML = '<span style="color: #aaa;">Click to edit...</span>';
+          itemContent.classList.add('empty');
+        }
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-button';
+        deleteButton.innerHTML = '×';
+        deleteButton.addEventListener('click', (e) => {
+          e.stopPropagation();
+          itemToDelete = index;
+          confirmationDialog.style.display = 'flex';
+        });
+
+        listItem.appendChild(itemNumber);
+        listItem.appendChild(itemContent);
+        listItem.appendChild(deleteButton);
+
+        // Event: Click to select
+        listItem.addEventListener('click', (e) => {
+          if (e.target !== itemContent && !itemContent.contains(e.target)) {
+            selectItem(index);
+          }
+        });
+
+        // Drag start
+        listItem.addEventListener('dragstart', () => {
+          draggedItemIndex = index;
+          setTimeout(() => listItem.classList.add('dragging'), 0);
+        });
+        // Drag end
+        listItem.addEventListener('dragend', () => {
+          listItem.classList.remove('dragging');
+          dropLine.style.display = 'none';
+          saveList();
+        });
+
+        // Drag over
+        listItem.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          if (draggedItemIndex === null) return;
+          const bounding = listItem.getBoundingClientRect();
+          const offset = bounding.y + bounding.height / 2;
+          const parentRect = listContainer.getBoundingClientRect();
+
+          if (e.clientY - bounding.y < bounding.height / 2) {
+            // Show line above this item
+            dropLine.style.top = (bounding.top + window.scrollY - 1) + 'px';
+            dropLine.style.left = (parentRect.left + window.scrollX) + 'px';
+            dropLine.style.width = bounding.width + 'px';
+            dropLine.style.display = 'block';
+          } else {
+            // Show line below this item
+            dropLine.style.top = (bounding.bottom + window.scrollY - 1) + 'px';
+            dropLine.style.left = (parentRect.left + window.scrollX) + 'px';
+            dropLine.style.width = bounding.width + 'px';
+            dropLine.style.display = 'block';
+          }
+        });
+
+        // Drop
+        listItem.addEventListener('drop', (e) => {
+          e.preventDefault();
+          if (draggedItemIndex !== null && draggedItemIndex !== index) {
+            const bounding = listItem.getBoundingClientRect();
+            const halfPoint = bounding.y + bounding.height / 2;
+            const itemData = items[draggedItemIndex];
+            // Remove original
+            items.splice(draggedItemIndex, 1);
+            
+            if (e.clientY < halfPoint) {
+              // Insert before this index
+              items.splice(index, 0, itemData);
+            } else {
+              // Insert after this index
+              items.splice(index + 1, 0, itemData);
+            }
+            renderList();
+            saveList();
+          }
+        });
+
+        // Editable content
+        itemContent.addEventListener('focus', (e) => {
+          if (itemContent.classList.contains('empty')) {
+            itemContent.innerHTML = '';
+            itemContent.classList.remove('empty');
+          }
+          selectItem(index);
+        });
+        itemContent.addEventListener('blur', () => {
+          items[index].html = itemContent.innerHTML;
+          items[index].text = itemContent.textContent;
+          saveList();
+          if (itemContent.innerHTML.trim() === '') {
+            itemContent.innerHTML = '<span style="color:#aaa;">Click to edit...</span>';
+            itemContent.classList.add('empty');
+          }
+        });
+        itemContent.addEventListener('keydown', (e) => {
+          if (e.key === 'Tab' || (e.key === 'ArrowRight' && e.altKey)) {
+            e.preventDefault();
+            if (index > 0) {
+              items[index].indentation = Math.min(items[index].indentation + 1, items[index - 1].indentation + 1);
+              renderList();
+              saveList();
+              const newItemContent = listContainer.children[index].querySelector('.item-content');
+              if (newItemContent) newItemContent.focus();
+            }
+          } else if ((e.key === 'ArrowLeft' && e.altKey) && items[index].indentation > 0) {
+            e.preventDefault();
+            items[index].indentation--;
+            renderList();
+            saveList();
+            const newItemContent = listContainer.children[index].querySelector('.item-content');
+            if (newItemContent) newItemContent.focus();
+          }
+        });
+
+        listContainer.appendChild(listItem);
+      });
+    }
+
+    /* ---------------- Save / Load ---------------- */
+    function saveList() {
+      if (undoIndex < undoStates.length - 1) {
+        undoStates = undoStates.slice(0, undoIndex + 1);
+      }
+      undoStates.push({
+        title: listTitleInput.value,
+        items: JSON.parse(JSON.stringify(items)),
+        fontFamily: fontSelector.value,
+        lineSpacing: currentLineSpacing,
+        itemSpacing: currentItemSpacing
+      });
+      if (undoStates.length > 20) undoStates.shift();
+      undoIndex = undoStates.length - 1;
+
+      localStorage.setItem('listData', JSON.stringify({
+        title: listTitleInput.value,
+        items: items,
+        fontFamily: fontSelector.value,
+        lineSpacing: currentLineSpacing,
+        itemSpacing: currentItemSpacing
+      }));
+    }
+    function loadList() {
+      const savedData = localStorage.getItem('listData');
+      if (savedData) {
+        const listData = JSON.parse(savedData);
+        items = listData.items || [];
+        listTitleInput.value = listData.title || '';
+        if (listData.fontFamily) {
+          fontSelector.value = listData.fontFamily;
+          document.body.style.fontFamily = listData.fontFamily;
+        }
+        if (listData.lineSpacing) {
+          currentLineSpacing = parseFloat(listData.lineSpacing);
+          updateLineSpacing();
+        }
+        if (listData.itemSpacing !== undefined) {
+          currentItemSpacing = parseInt(listData.itemSpacing);
+          updateItemSpacing();
+        }
+      }
+      renderList();
+      undoStates = [{
+        title: listTitleInput.value,
+        items: JSON.parse(JSON.stringify(items)),
+        fontFamily: fontSelector.value,
+        lineSpacing: currentLineSpacing,
+        itemSpacing: currentItemSpacing
+      }];
+      undoIndex = 0;
+    }
+
+    /* ---------------- Delete Confirmation ---------------- */
+    confirmDeleteButton.addEventListener('click', () => {
+      if (itemToDelete !== null) {
+        items.splice(itemToDelete, 1);
+        if (selectedItemIndex === itemToDelete) {
+          selectedItemIndex = null;
+        } else if (selectedItemIndex > itemToDelete) {
+          selectedItemIndex--;
+        }
+        renderList();
+        saveList();
+      }
+      confirmationDialog.style.display = 'none';
+    });
+    cancelDeleteButton.addEventListener('click', () => {
+      confirmationDialog.style.display = 'none';
+    });
+    listTitleInput.addEventListener('input', saveList);
+
+    /* ---------------- Export (RTF/JSON) ---------------- */
+    function htmlToRTF(html, indentation, number) {
+      let rtf = '';
+      // Indent in RTF:
+      rtf += '\\pard\\tx' + (indentation * 720) + ' ';
+      rtf += '\\li' + (indentation * 720) + ' ';
+      rtf += number + ' ';
+
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+
+      function processNode(node) {
+        if (node.nodeType === 3) { 
+          return node.textContent
+            .replace(/\\/g, '\\\\')
+            .replace(/\{/g, '\\{')
+            .replace(/\}/g, '\\}');
+        }
+        if (node.nodeType === 1) {
+          let content = '';
+          let prefix = '', suffix = '';
+          if (node.nodeName === 'B' || node.nodeName === 'STRONG') {
+            prefix = '{\\b '; suffix = '}';
+          } else if (node.nodeName === 'I' || node.nodeName === 'EM') {
+            prefix = '{\\i '; suffix = '}';
+          } else if (node.nodeName === 'U') {
+            prefix = '{\\ul '; suffix = '}';
+          } else if (
+            node.style && node.style.color === 'grey' ||
+            node.style && node.style.color === 'rgb(128, 128, 128)'
+          ) {
+            prefix = '{\\cf1 '; suffix = '}';
+          } else if (node.classList && node.classList.contains('pink-highlight')) {
+            prefix = '{\\highlight2 '; suffix = '}';
+          } else if (node.style && node.style.fontSize) {
+            const fontSize = parseInt(node.style.fontSize);
+            const halfPoints = Math.round(fontSize * 2);
+            prefix = '{\\fs' + halfPoints + ' ';
+            suffix = '}';
+          }
+          for (const child of node.childNodes) {
+            content += processNode(child);
+          }
+          return prefix + content + suffix;
+        }
+        return '';
+      }
+
+      for (const child of temp.childNodes) {
+        rtf += processNode(child);
+      }
+      rtf += '\\par\n';
+      return rtf;
+    }
+    function generateRTF(title, items, numbers) {
+      let rtf = '{\\rtf1\\ansi\\ansicpg1252\\cocoartf2580\\cocoasubrtf220\n';
+      rtf += '{\\fonttbl\\f0\\fswiss\\fcharset0 Helvetica;}\n';
+      rtf += '{\\colortbl;\\red128\\green128\\blue128;\\red255\\green192\\blue203;}\n';
+      rtf += '\\vieww12000\\viewh15000\\viewkind0\n';
+      // Title
+      rtf += '\\pard\\tx720\\qc\\f0\\fs36 ' 
+        + title.replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}') 
+        + '\\par\n';
+      rtf += '\\pard\\tx720\\fs24\\par\n';
+      // Items
+      for (let i = 0; i < items.length; i++) {
+        rtf += htmlToRTF(items[i].html, items[i].indentation, numbers[i]);
+      }
+      rtf += '}';
+      return rtf;
+    }
+
+    exportButton.addEventListener('click', () => {
+      const formatDialog = document.createElement('div');
+      formatDialog.className = 'confirmation-dialog';
+      formatDialog.style.display = 'flex';
+
+      const dialogContent = document.createElement('div');
+      dialogContent.className = 'confirmation-content';
+
+      const heading = document.createElement('p');
+      heading.textContent = 'Choose export format:';
+      heading.style.fontWeight = 'bold';
+
+      const rtfButton = document.createElement('button');
+      rtfButton.textContent = 'RTF (formatted text)';
+      rtfButton.style.margin = '5px';
+      const jsonButton = document.createElement('button');
+      jsonButton.textContent = 'JSON (backup)';
+      jsonButton.style.margin = '5px';
+      const bothButton = document.createElement('button');
+      bothButton.textContent = 'Export Both';
+      bothButton.style.margin = '5px';
+      const cancelButton = document.createElement('button');
+      cancelButton.textContent = 'Cancel';
+      cancelButton.style.margin = '5px';
+
+      dialogContent.appendChild(heading);
+      dialogContent.appendChild(rtfButton);
+      dialogContent.appendChild(jsonButton);
+      dialogContent.appendChild(bothButton);
+      dialogContent.appendChild(document.createElement('br'));
+      dialogContent.appendChild(cancelButton);
+
+      formatDialog.appendChild(dialogContent);
+      document.body.appendChild(formatDialog);
+
+      function exportRTF() {
+        const numbers = computeNumbers();
+        const rtfContent = generateRTF(listTitleInput.value, items, numbers);
+        const blob = new Blob([rtfContent], { type: 'text/rtf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (listTitleInput.value || 'list') + '.rtf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+      function exportJSON() {
+        const listData = { 
+          title: listTitleInput.value, 
+          items: items,
+          fontFamily: fontSelector.value,
+          lineSpacing: currentLineSpacing,
+          itemSpacing: currentItemSpacing,
+          globalFontSize: globalFontSize
+        };
+        const blob = new Blob([JSON.stringify(listData)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (listTitleInput.value || 'list') + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      rtfButton.addEventListener('click', () => {
+        exportRTF();
+        document.body.removeChild(formatDialog);
+      });
+      jsonButton.addEventListener('click', () => {
+        exportJSON();
+        document.body.removeChild(formatDialog);
+      });
+      bothButton.addEventListener('click', () => {
+        exportRTF();
+        exportJSON();
+        document.body.removeChild(formatDialog);
+      });
+      cancelButton.addEventListener('click', () => {
+        document.body.removeChild(formatDialog);
+      });
+    });
+
+    importButton.addEventListener('click', () => {
+      importFileInput.click();
+    });
+    importFileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        try {
+          const data = JSON.parse(event.target.result);
+          if (data && Array.isArray(data.items)) {
+            items = data.items;
+            listTitleInput.value = data.title || '';
+            if (data.fontFamily) {
+              fontSelector.value = data.fontFamily;
+              document.body.style.fontFamily = data.fontFamily;
+            }
+            if (data.lineSpacing) {
+              currentLineSpacing = parseFloat(data.lineSpacing);
+              updateLineSpacing();
+            }
+            if (data.itemSpacing !== undefined) {
+              currentItemSpacing = parseInt(data.itemSpacing);
+              updateItemSpacing();
+            }
+            if (data.globalFontSize) {
+              globalFontSize = data.globalFontSize;
+              document.body.style.fontSize = globalFontSize + 'px';
+              updateTileFontSizes();
+            }
+            renderList();
+            saveList();
+          } else {
+            alert('Invalid file format.');
+          }
+        } catch (error) {
+          alert('Error parsing file.');
+        }
+      };
+      reader.readAsText(file);
+      importFileInput.value = "";
+    });
+
+    /* ---------------- Hide Format Bar on Outside Click ---------------- */
+    document.addEventListener('mousedown', (e) => {
+      const clickedInListItem = e.target.closest('.list-item');
+      const clickedInFormattingBar = e.target.closest('.formatting-bar');
+      const clickedInDialogOrHeader = e.target.closest('.confirmation-dialog, header');
+      const clickedInControls = e.target.closest('#add-item-container, #export-button, #import-button, #list-title');
+
+      if (!clickedInListItem && !clickedInFormattingBar && !clickedInDialogOrHeader && !clickedInControls) {
+        selectItem(null);
+      }
+      if (!formattingBar.contains(e.target) && !e.target.closest('.list-item')) {
+        setTimeout(() => {
+          formattingBar.classList.remove('visible');
+        }, 10);
+      }
+    });
+
+    /* ---------------- Re-show Format Bar on Selection Change ---------------- */
+    document.addEventListener('selectionchange', () => {
+      const selection = window.getSelection();
+      if (!selection.rangeCount) return;
+      let node = selection.anchorNode;
+      while (node && node.nodeType !== 1) {
+        node = node.parentNode;
+      }
+      if (node && (node.classList && node.classList.contains('item-content') 
+                || node.closest && node.closest('.item-content'))) {
+        if (selection.toString().length > 0) {
+          showFormatBar();
+        }
+      }
+    });
+
+    /* ---------------- Undo / Redo ---------------- */
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        if (undoIndex > 0) {
+          undoIndex--;
+          const previousState = undoStates[undoIndex];
+          listTitleInput.value = previousState.title;
+          items = JSON.parse(JSON.stringify(previousState.items));
+          if (previousState.fontFamily) {
+            fontSelector.value = previousState.fontFamily;
+            document.body.style.fontFamily = previousState.fontFamily;
+          }
+          if (previousState.lineSpacing) {
+            currentLineSpacing = parseFloat(previousState.lineSpacing);
+            updateLineSpacing();
+          }
+          if (previousState.itemSpacing !== undefined) {
+            currentItemSpacing = parseInt(previousState.itemSpacing);
+            updateItemSpacing();
+          }
+          renderList();
+          localStorage.setItem('listData', JSON.stringify(previousState));
+        }
+      } else if (e.ctrlKey && e.key === 'y') {
+        e.preventDefault();
+        if (undoIndex < undoStates.length - 1) {
+          undoIndex++;
+          const nextState = undoStates[undoIndex];
+          listTitleInput.value = nextState.title;
+          items = JSON.parse(JSON.stringify(nextState.items));
+          if (nextState.fontFamily) {
+            fontSelector.value = nextState.fontFamily;
+            document.body.style.fontFamily = nextState.fontFamily;
+          }
+          if (nextState.lineSpacing) {
+            currentLineSpacing = parseFloat(nextState.lineSpacing);
+            updateLineSpacing();
+          }
+          if (nextState.itemSpacing !== undefined) {
+            currentItemSpacing = parseInt(nextState.itemSpacing);
+            updateItemSpacing();
+          }
+          renderList();
+          localStorage.setItem('listData', JSON.stringify(nextState));
+        }
+      }
+    });
+
+    /* ---------------- Initialize ---------------- */
+    loadList();
+    formattingBar.style.top = '-1000px';
+    formattingBar.style.left = '-1000px';
+  </script>
+</body>
+</html>
