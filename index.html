@@ -2,15 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!-- Ensure proper scaling on mobile -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>List Manager (Pointer Events)</title>
   <style>
-    /* Minimal color variables */
     :root {
       --bg-color: #ffffff;
       --text-color: #000000;
-      --accent-color: #4c84ff; 
+      --accent-color: #4c84ff;
       --highlight-color: #ffc0cb;
       --line-spacing: 1.0;
       --item-spacing: 4px;
@@ -23,11 +21,8 @@
       --highlight-color: #ff6b8b;
     }
 
-    /* Prevent iOS zoom by ensuring 16px on form elements */
-    input,
-    button,
-    select,
-    textarea {
+    /* iOS-friendly base font size */
+    input, button, select, textarea {
       font-size: 16px;
     }
 
@@ -65,17 +60,14 @@
       }
     }
 
-    select,
-    input[type="text"],
-    button {
+    select, input[type="text"], button {
       border: none;
       outline: none;
       background: none;
       color: inherit;
       transition: opacity var(--transition-speed);
     }
-    select,
-    input[type="text"] {
+    select, input[type="text"] {
       border-bottom: 1px solid currentColor;
       padding: 2px 0;
     }
@@ -96,19 +88,24 @@
       margin-top: 2rem;
       transition: all var(--transition-speed);
     }
+
+    /* 
+      CRUCIAL FOR IOS:
+      Prevent any scroll/pinch gestures on the item itself.
+    */
     .list-item {
       display: flex;
       align-items: center;
       margin-bottom: var(--item-spacing);
       line-height: calc(1em * var(--line-spacing));
       transition: background-color var(--transition-speed);
-      /* Just to visually indicate when "dragging" if desired:
-      user-select: none;  (Optional to prevent text from being selected)
-      */
+      touch-action: none; /* <--- This is the fix */
     }
+
     .list-item.selected {
       background-color: rgba(76, 132, 255, 0.07);
     }
+
     .item-number {
       min-width: 28px;
       margin-right: 8px;
@@ -123,6 +120,7 @@
     .item-content:focus {
       background-color: rgba(76, 132, 255, 0.05);
     }
+
     .delete-button {
       opacity: 0.3;
       border: none;
@@ -149,7 +147,6 @@
       padding: 2px 0;
     }
 
-    /* Formatting bar */
     .formatting-bar {
       position: absolute;
       padding: 4px 6px;
@@ -168,7 +165,6 @@
       opacity: 1;
     }
 
-    /* Confirmation dialog */
     .confirmation-dialog {
       position: fixed;
       top: 0; left: 0;
