@@ -8,9 +8,9 @@
     :root {
       --bg-color: #ffffff;
       --text-color: #000000;
-      --accent-color: #4c84ff;
+      --accent-color: #4c84ff; 
       --highlight-color: #ffc0cb;
-      --line-spacing: 1.4;
+      --line-spacing: 1.0;
       --item-spacing: 4px;
       --transition-speed: 0.15s;
     }
@@ -25,6 +25,25 @@
     input, button, select, textarea {
       font-size: 16px;
     }
+
+    /* -------------- NEW LINES HERE -------------- */
+    /* Remove iOS Safari's default "inner shadow"/border on inputs */
+    input[type="text"],
+    textarea,
+    select {
+      -webkit-appearance: none;
+      border-radius: 0;
+      border: none;
+      outline: none;
+      box-shadow: none;
+    }
+    /* If you want to ensure contentEditable doesn’t show an iOS focus ring: */
+    .item-content:focus {
+      outline: none !important; 
+      box-shadow: none !important;
+      -webkit-appearance: none;
+    }
+    /* -------------- END NEW LINES -------------- */
 
     body {
       margin: 0;
