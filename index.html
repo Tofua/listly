@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <!-- Ensure proper scaling on mobile -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>List Manager</title>
+  <title>List Manager (Pointer Events)</title>
   <style>
-    /* Minimalist color variables */
+    /* Minimal color variables */
     :root {
       --bg-color: #ffffff;
       --text-color: #000000;
@@ -54,8 +54,6 @@
       align-items: center;
       gap: 8px;
     }
-
-    /* Responsive tweak for narrow screens */
     @media (max-width: 600px) {
       .controls {
         flex-direction: column;
@@ -67,7 +65,6 @@
       }
     }
 
-    /* Minimal styling for select, text inputs, and buttons */
     select,
     input[type="text"],
     button {
@@ -90,7 +87,6 @@
       opacity: 0.7;
     }
 
-    /* Title input */
     #list-title {
       font-size: 1.3rem;
       padding: 2px 0;
@@ -106,12 +102,12 @@
       margin-bottom: var(--item-spacing);
       line-height: calc(1em * var(--line-spacing));
       transition: background-color var(--transition-speed);
+      /* Just to visually indicate when "dragging" if desired:
+      user-select: none;  (Optional to prevent text from being selected)
+      */
     }
     .list-item.selected {
       background-color: rgba(76, 132, 255, 0.07);
-    }
-    .list-item.dragging {
-      opacity: 0.4;
     }
     .item-number {
       min-width: 28px;
@@ -153,6 +149,7 @@
       padding: 2px 0;
     }
 
+    /* Formatting bar */
     .formatting-bar {
       position: absolute;
       padding: 4px 6px;
@@ -171,6 +168,7 @@
       opacity: 1;
     }
 
+    /* Confirmation dialog */
     .confirmation-dialog {
       position: fixed;
       top: 0; left: 0;
@@ -219,7 +217,6 @@
   <header>
     <h1 style="margin:0;font-size:1.2rem;">List Manager</h1>
     <div class="controls">
-      <!-- same controls as before -->
       <select id="font-selector">
         <option value="sans-serif">Sans-serif</option>
         <option value="serif">Serif</option>
@@ -227,31 +224,31 @@
         <option value="Arial, sans-serif">Arial</option>
         <option value="'Times New Roman', serif">Times</option>
       </select>
-
+      
       <div class="spacing-controls" style="display:flex;align-items:center;gap:4px;">
         <label title="Line Spacing">Line:</label>
         <button id="decrease-spacing">–</button>
         <span id="spacing-value">1.0</span>
         <button id="increase-spacing">+</button>
       </div>
-
+      
       <div class="spacing-controls" style="display:flex;align-items:center;gap:4px;">
         <label title="Item Spacing">Gap:</label>
         <button id="decrease-item-spacing">–</button>
         <span id="item-spacing-value">4</span>
         <button id="increase-item-spacing">+</button>
       </div>
-
+      
       <div style="display:flex;align-items:center;gap:4px;">
         <label for="theme-switch">Dark</label>
         <input type="checkbox" id="theme-switch" />
       </div>
-
+      
       <div class="warmth-control">
         <label for="warmth-slider">Warmth</label>
         <input type="range" id="warmth-slider" min="0" max="100" value="0">
       </div>
-
+      
       <div class="global-font-controls">
         <label>Font:</label>
         <button id="global-font-decrease">A–</button>
@@ -262,6 +259,7 @@
 
   <input type="text" id="list-title" placeholder="Enter List Title Here..." />
 
+  <!-- Formatting bar for text inside a tile -->
   <div class="formatting-bar" id="formatting-bar">
     <button data-command="bold"><b>B</b></button>
     <button data-command="italic"><i>I</i></button>
@@ -287,8 +285,10 @@
     <input type="file" id="import-file" style="display:none;" accept=".json"/>
   </div>
 
+  <!-- Hidden drop-line used during dragging -->
   <div id="drop-line"></div>
 
+  <!-- Confirmation dialog -->
   <div id="confirmation-dialog" class="confirmation-dialog" style="display:none;">
     <div class="confirmation-content">
       <p>Delete this item?</p>
@@ -299,8 +299,8 @@
     </div>
   </div>
 
-  <!-- Your same script content as before -->
   <script>
+    /* ---------------- Global Variables ---------------- */
     let currentLineSpacing = 1.0;
     let currentItemSpacing = 4;
     const defaultTileFontSize = 16;
@@ -344,11 +344,15 @@
     const dropLine = document.getElementById('drop-line');
 
     let items = [];
-    let draggedItemIndex = null;
     let itemToDelete = null;
     let selectedItemIndex = null;
     let undoStates = [{items: [], title: ''}];
     let undoIndex = 0;
+
+    // --- Mobile-friendly drag logic variables ---
+    let isDragging = false;
+    let draggedItemIndex = null;     // which item we started dragging
+    let hoveredItemIndex = null;     // which item we’re currently “hovering” for drop
 
     /* ---------------- Warmth Functions ---------------- */
     function interpolateLightColor(val) {
@@ -707,7 +711,97 @@
       }
     }
 
-    /* ---------------- Drag-Drop with Drop-Line ---------------- */
+    /* ---------------- Pointer-based "Drag" (for Mobile + Desktop) ---------------- */
+    function pointerDownHandler(e, index) {
+      // Only respond to primary button/finger
+      if (e.button !== 0) return;
+      isDragging = true;
+      draggedItemIndex = index;
+      hoveredItemIndex = null;
+
+      // Grab pointer so we can continue receiving pointermove
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+
+    function pointerMoveGlobal(e) {
+      if (!isDragging || draggedItemIndex == null) return;
+      // Figure out which item we're hovering over
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if(!el) {
+        dropLine.style.display = 'none';
+        hoveredItemIndex = null;
+        return;
+      }
+      const targetListItem = el.closest('.list-item');
+      if(!targetListItem) {
+        dropLine.style.display = 'none';
+        hoveredItemIndex = null;
+        return;
+      }
+      // Convert that element to an index in our items array
+      const index = Array.from(listContainer.children).indexOf(targetListItem);
+      if(index === -1) {
+        dropLine.style.display = 'none';
+        hoveredItemIndex = null;
+        return;
+      }
+      hoveredItemIndex = index;
+      // Show drop line above or below the hovered item
+      const bounding = targetListItem.getBoundingClientRect();
+      const itemMidY = bounding.top + bounding.height / 2;
+      if(e.clientY < itemMidY) {
+        // Above
+        dropLine.style.top = (bounding.top + window.scrollY - 1) + 'px';
+      } else {
+        // Below
+        dropLine.style.top = (bounding.bottom + window.scrollY - 1) + 'px';
+      }
+      const parentRect = listContainer.getBoundingClientRect();
+      dropLine.style.left = (parentRect.left + window.scrollX) + 'px';
+      dropLine.style.width = bounding.width + 'px';
+      dropLine.style.display = 'block';
+    }
+
+    function pointerUpGlobal(e) {
+      if (!isDragging) return;
+      isDragging = false;
+      dropLine.style.display = 'none';
+
+      // Release pointer
+      const t = e.target;
+      try {
+        t.releasePointerCapture(e.pointerId);
+      } catch {}
+
+      if (hoveredItemIndex == null) {
+        // Not dropped on a valid item
+        draggedItemIndex = null;
+        return;
+      }
+
+      // Reorder
+      const hoveredEl = listContainer.children[hoveredItemIndex];
+      const bounding = hoveredEl.getBoundingClientRect();
+      const itemMidY = bounding.top + bounding.height / 2;
+
+      const itemData = items[draggedItemIndex];
+      items.splice(draggedItemIndex, 1);
+
+      // Insert above or below the hovered item
+      if (e.clientY < itemMidY) {
+        items.splice(hoveredItemIndex, 0, itemData);
+      } else {
+        items.splice(hoveredItemIndex + 1, 0, itemData);
+      }
+
+      renderList();
+      saveList();
+
+      draggedItemIndex = null;
+      hoveredItemIndex = null;
+    }
+
+    /* ---------------- Render List ---------------- */
     function renderList() {
       listContainer.innerHTML = '';
       const numbers = computeNumbers();
@@ -719,8 +813,10 @@
         if (index === selectedItemIndex) {
           listItem.classList.add('selected');
         }
-        listItem.draggable = true;
         listItem.style.marginLeft = (item.indentation * 30) + 'px';
+
+        // Instead of native drag, listen for pointerdown
+        listItem.addEventListener('pointerdown', (e) => pointerDownHandler(e, index));
 
         const itemNumber = document.createElement('div');
         itemNumber.className = 'item-number';
@@ -750,71 +846,14 @@
         listItem.appendChild(itemContent);
         listItem.appendChild(deleteButton);
 
-        // Event: Click to select
+        // Clicking the background of a list item to select
         listItem.addEventListener('click', (e) => {
           if (e.target !== itemContent && !itemContent.contains(e.target)) {
             selectItem(index);
           }
         });
 
-        // Drag start
-        listItem.addEventListener('dragstart', () => {
-          draggedItemIndex = index;
-          setTimeout(() => listItem.classList.add('dragging'), 0);
-        });
-        // Drag end
-        listItem.addEventListener('dragend', () => {
-          listItem.classList.remove('dragging');
-          dropLine.style.display = 'none';
-          saveList();
-        });
-
-        // Drag over
-        listItem.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          if (draggedItemIndex === null) return;
-          const bounding = listItem.getBoundingClientRect();
-          const offset = bounding.y + bounding.height / 2;
-          const parentRect = listContainer.getBoundingClientRect();
-
-          if (e.clientY - bounding.y < bounding.height / 2) {
-            // Show line above this item
-            dropLine.style.top = (bounding.top + window.scrollY - 1) + 'px';
-            dropLine.style.left = (parentRect.left + window.scrollX) + 'px';
-            dropLine.style.width = bounding.width + 'px';
-            dropLine.style.display = 'block';
-          } else {
-            // Show line below this item
-            dropLine.style.top = (bounding.bottom + window.scrollY - 1) + 'px';
-            dropLine.style.left = (parentRect.left + window.scrollX) + 'px';
-            dropLine.style.width = bounding.width + 'px';
-            dropLine.style.display = 'block';
-          }
-        });
-
-        // Drop
-        listItem.addEventListener('drop', (e) => {
-          e.preventDefault();
-          if (draggedItemIndex !== null && draggedItemIndex !== index) {
-            const bounding = listItem.getBoundingClientRect();
-            const halfPoint = bounding.y + bounding.height / 2;
-            const itemData = items[draggedItemIndex];
-            // Remove original
-            items.splice(draggedItemIndex, 1);
-            
-            if (e.clientY < halfPoint) {
-              // Insert before this index
-              items.splice(index, 0, itemData);
-            } else {
-              // Insert after this index
-              items.splice(index + 1, 0, itemData);
-            }
-            renderList();
-            saveList();
-          }
-        });
-
-        // Editable content
+        // Editable text
         itemContent.addEventListener('focus', (e) => {
           if (itemContent.classList.contains('empty')) {
             itemContent.innerHTML = '';
@@ -930,16 +969,13 @@
     /* ---------------- Export (RTF/JSON) ---------------- */
     function htmlToRTF(html, indentation, number) {
       let rtf = '';
-      // Indent in RTF:
       rtf += '\\pard\\tx' + (indentation * 720) + ' ';
       rtf += '\\li' + (indentation * 720) + ' ';
       rtf += number + ' ';
-
       const temp = document.createElement('div');
       temp.innerHTML = html;
-
       function processNode(node) {
-        if (node.nodeType === 3) { 
+        if (node.nodeType === 3) {
           return node.textContent
             .replace(/\\/g, '\\\\')
             .replace(/\{/g, '\\{')
@@ -974,7 +1010,6 @@
         }
         return '';
       }
-
       for (const child of temp.childNodes) {
         rtf += processNode(child);
       }
@@ -986,12 +1021,10 @@
       rtf += '{\\fonttbl\\f0\\fswiss\\fcharset0 Helvetica;}\n';
       rtf += '{\\colortbl;\\red128\\green128\\blue128;\\red255\\green192\\blue203;}\n';
       rtf += '\\vieww12000\\viewh15000\\viewkind0\n';
-      // Title
       rtf += '\\pard\\tx720\\qc\\f0\\fs36 ' 
         + title.replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}') 
         + '\\par\n';
       rtf += '\\pard\\tx720\\fs24\\par\n';
-      // Items
       for (let i = 0; i < items.length; i++) {
         rtf += htmlToRTF(items[i].html, items[i].indentation, numbers[i]);
       }
@@ -1145,7 +1178,7 @@
       }
     });
 
-    /* ---------------- Re-show Format Bar on Selection Change ---------------- */
+    /* Re-show Format Bar on Selection Change */
     document.addEventListener('selectionchange', () => {
       const selection = window.getSelection();
       if (!selection.rangeCount) return;
@@ -1209,6 +1242,10 @@
         }
       }
     });
+
+    /* Listen for pointermove & pointerup globally to handle drag reordering */
+    document.addEventListener('pointermove', pointerMoveGlobal);
+    document.addEventListener('pointerup', pointerUpGlobal);
 
     /* ---------------- Initialize ---------------- */
     loadList();
