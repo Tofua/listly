@@ -226,6 +226,20 @@
     .pink-highlight {
       background-color: var(--highlight-color) !important;
     }
+      /* Place this inside your existing <style> block OR here as its own <style> */
+  
+  @keyframes flashRed {
+    0%, 100% {
+      background-color: red;
+    }
+    50% {
+      background-color: #ffaaaa;
+    }
+  }
+  /* Use this .warning-content to flash red */
+  .warning-content {
+    animation: flashRed 1.2s infinite;
+  }
   </style>
 </head>
 <body>
@@ -298,8 +312,18 @@
     <button id="export-button">Export</button>
     <button id="import-button">Import</button>
     <input type="file" id="import-file" style="display:none;" accept=".json"/>
+    <button id="clear-list-button">Clear List</button>
   </div>
-
+<!-- AFTER: The new clear-confirmation dialog -->
+<div id="clear-confirmation-dialog" class="confirmation-dialog" style="display:none;">
+    <div class="confirmation-content warning-content">
+      <p>Are you sure you want to clear the entire list?</p>
+      <div style="margin-top:10px;">
+        <button class="confirm-clear">Yes, clear it</button>
+        <button class="cancel-clear">No, keep it</button>
+      </div>
+    </div>
+  </div>
   <!-- Hidden drop-line used during dragging -->
   <div id="drop-line"></div>
 
@@ -357,6 +381,11 @@
     const globalFontIncreaseBtn = document.getElementById('global-font-increase');
     const globalFontDecreaseBtn = document.getElementById('global-font-decrease');
     const dropLine = document.getElementById('drop-line');
+      // Grab references for the new "Clear List" button & its confirmation dialog:
+    const clearListButton = document.getElementById('clear-list-button');
+    const clearConfirmationDialog = document.getElementById('clear-confirmation-dialog');
+    const confirmClearButton = document.querySelector('.confirm-clear');
+    const cancelClearButton = document.querySelector('.cancel-clear');
 
     let items = [];
     let itemToDelete = null;
@@ -778,43 +807,57 @@
     }
 
     function pointerUpGlobal(e) {
-      if (!isDragging) return;
-      isDragging = false;
-      dropLine.style.display = 'none';
+  if (!isDragging) return;
+  isDragging = false;
+  dropLine.style.display = 'none';
 
-      // Release pointer
-      const t = e.target;
-      try {
-        t.releasePointerCapture(e.pointerId);
-      } catch {}
+  // Release pointer
+  const t = e.target;
+  try {
+    t.releasePointerCapture(e.pointerId);
+  } catch {}
 
-      if (hoveredItemIndex == null) {
-        // Not dropped on a valid item
-        draggedItemIndex = null;
-        return;
-      }
+  if (hoveredItemIndex == null || draggedItemIndex == null) {
+    // Not dropped on a valid item
+    draggedItemIndex = null;
+    return;
+  }
 
-      // Reorder
-      const hoveredEl = listContainer.children[hoveredItemIndex];
-      const bounding = hoveredEl.getBoundingClientRect();
-      const itemMidY = bounding.top + bounding.height / 2;
-
-      const itemData = items[draggedItemIndex];
-      items.splice(draggedItemIndex, 1);
-
-      // Insert above or below the hovered item
-      if (e.clientY < itemMidY) {
-        items.splice(hoveredItemIndex, 0, itemData);
-      } else {
-        items.splice(hoveredItemIndex + 1, 0, itemData);
-      }
-
-      renderList();
-      saveList();
-
-      draggedItemIndex = null;
-      hoveredItemIndex = null;
-    }
+  // Get the item we're hovering over
+  const hoveredEl = listContainer.children[hoveredItemIndex];
+  const bounding = hoveredEl.getBoundingClientRect();
+  const itemMidY = bounding.top + bounding.height / 2;
+  
+  // Determine if we're dropping above or below the hovered item
+  const dropBelow = e.clientY >= itemMidY;
+  
+  // Calculate the actual position where we'll insert the item
+  let insertPosition = dropBelow ? hoveredItemIndex + 1 : hoveredItemIndex;
+  
+  // Adjust insert position if moving an item to a later position
+  if (insertPosition > draggedItemIndex) {
+    insertPosition--;
+  }
+  
+  // Don't do anything if we're dropping at the original position
+  if (insertPosition === draggedItemIndex) {
+    draggedItemIndex = null;
+    hoveredItemIndex = null;
+    return;
+  }
+  
+  // Remove the item from its original position and insert it at the new position
+  const [movedItem] = items.splice(draggedItemIndex, 1);
+  items.splice(insertPosition, 0, movedItem);
+  
+  // Update the UI and save changes
+  renderList();
+  saveList();
+  
+  // Reset tracking variables
+  draggedItemIndex = null;
+  hoveredItemIndex = null;
+}
 
     /* ---------------- Render List ---------------- */
     function renderList() {
@@ -831,11 +874,19 @@
         listItem.style.marginLeft = (item.indentation * 30) + 'px';
 
         // Instead of native drag, listen for pointerdown
-        listItem.addEventListener('pointerdown', (e) => pointerDownHandler(e, index));
+        listItem.addEventListener('pointerdown', (e) => {
+        // If the user clicked directly on the delete button (or inside it),
+        // then DON'T start dragging. Just let the delete click happen.
+        if (e.target.closest('.delete-button')) {
+        return;
+       }
+     pointerDownHandler(e, index);
+});
 
-        const itemNumber = document.createElement('div');
-        itemNumber.className = 'item-number';
-        itemNumber.textContent = numbers[index];
+const itemNumber = document.createElement('div');
+itemNumber.className = 'item-number';
+itemNumber.textContent = numbers[index];
+// ... (the code after remains the same)
 
         const itemContent = document.createElement('div');
         itemContent.className = 'item-content';
@@ -980,6 +1031,35 @@
       confirmationDialog.style.display = 'none';
     });
     listTitleInput.addEventListener('input', saveList);
+    // EDIT (Inserted Code): Clear entire list
+clearListButton.addEventListener('click', () => {
+  clearConfirmationDialog.style.display = 'flex';
+});
+
+confirmClearButton.addEventListener('click', () => {
+  // Optionally reset the title to blank:
+  document.getElementById('list-title').value = '';
+
+  // Clear out the items array
+  items = [];
+
+  // Re-render so it's visibly empty
+  renderList();
+
+  // Save the empty state to localStorage
+  localStorage.setItem('listData', JSON.stringify({
+    title: '',
+    items: []
+  }));
+
+  // Hide the confirmation dialog
+  clearConfirmationDialog.style.display = 'none';
+});
+
+cancelClearButton.addEventListener('click', () => {
+  clearConfirmationDialog.style.display = 'none';
+});
+
 
     /* ---------------- Export (RTF/JSON) ---------------- */
     function htmlToRTF(html, indentation, number) {
@@ -1259,8 +1339,15 @@
     });
 
     /* Listen for pointermove & pointerup globally to handle drag reordering */
-    document.addEventListener('pointermove', pointerMoveGlobal);
-    document.addEventListener('pointerup', pointerUpGlobal);
+// AFTER: Possibly your dragging or pointer event code:
+document.addEventListener('pointermove', pointerMoveGlobal);
+document.addEventListener('pointerup', pointerUpGlobal);
+
+// (Re)initialize or final calls
+loadList();
+formattingBar.style.top = '-1000px';
+formattingBar.style.left = '-1000px';
+
 
     /* ---------------- Initialize ---------------- */
     loadList();
